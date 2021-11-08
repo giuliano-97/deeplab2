@@ -35,7 +35,12 @@ flags.DEFINE_string(
 flags.DEFINE_bool(
     name="remove_semantic_and_instance",
     default=False,
-    help="If true, semantic and instance labels will be removed.",
+    help="Semantic and instance labels will be removed.",
+)
+flags.DEFINE_bool(
+    name="compress",
+    default=False,
+    help="Panoptic maps will be compressed into a tar.gz archive.",
 )
 
 flags.DEFINE_integer(name="jobs", default=2, help="Number of parallel jobs")
@@ -48,12 +53,13 @@ _INSTANCE_MAPS_ARCHIVE_SUFFIX = "_2d-instance-filt.zip"
 _INSTANCE_MAPS_DIR_NAME = "instance-filt"
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 
+
 def _scan_has_panoptic(scan_dir_path: Path):
     panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
     if panoptic_maps_dir_path.exists() and any(panoptic_maps_dir_path.iterdir()):
         return True
 
-    panoptic_maps_archive_path = panoptic_maps_dir_path.with_suffix(".tar.gz") 
+    panoptic_maps_archive_path = panoptic_maps_dir_path.with_suffix(".tar.gz")
     if panoptic_maps_archive_path.exists():
         return True
 
@@ -103,8 +109,7 @@ def normalize_instance_map(instance_map: np.ndarray):
 
 
 def make_panoptic_from_semantic_and_instance(
-    semantic_map: np.ndarray,
-    instance_map: np.ndarray,
+    semantic_map: np.ndarray, instance_map: np.ndarray,
 ):
     panoptic_map = semantic_map * _LABEL_DIVISOR + instance_map
     return panoptic_map.astype(np.int32)
@@ -138,6 +143,75 @@ def generate_deeplab2_panoptic_map(
     panoptic_map_image.save(str(panoptic_map_file_path))
 
 
+def create_panoptic_maps_for_scan(
+    scan_dir_path: Path,
+    label_conversion_dict: Dict,
+    remove_semantic_and_instance: bool,
+):
+    if not scan_dir_path.is_dir():
+        return
+
+    # Check if panoptic maps have already been created for this scans
+    if _scan_has_panoptic(scan_dir_path):
+        logging.warn(f"{scan_dir_path.name} already has panoptic!")
+        return
+    panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
+    panoptic_maps_dir_path.mkdir(exist_ok=True)
+
+    semantic_maps_dir_path = scan_dir_path / _SEMANTIC_MAPS_DIR_NAME
+    instance_maps_dir_path = scan_dir_path / _INSTANCE_MAPS_DIR_NAME
+    remove_semantic = False or remove_semantic_and_instance
+    remove_instance = False or remove_semantic_and_instance
+    if not semantic_maps_dir_path.exists():
+        # If not found, try to extract the archive
+        semantic_maps_archive_path = scan_dir_path / (
+            scan_dir_path.stem + _SEMANTIC_MAPS_ARCHIVE_SUFFIX
+        )
+        if not semantic_maps_archive_path.exists():
+            logging.warn(
+                '"label-filt" missing in scan {}. Skipped.'.format(
+                    str(scan_dir_path.name)
+                )
+            )
+            return
+        extract_zip_archive(semantic_maps_archive_path)
+        remove_semantic = True
+    if not instance_maps_dir_path.exists():
+        instance_maps_archive_path = scan_dir_path / (
+            scan_dir_path.stem + _INSTANCE_MAPS_ARCHIVE_SUFFIX
+        )
+        if not instance_maps_archive_path.exists():
+            logging.warn(
+                '"instance-filt" missing in scan {}. Skipped.'.format(
+                    str(scan_dir_path.name)
+                )
+            )
+            return
+        extract_zip_archive(instance_maps_archive_path)
+        remove_instance = True
+
+    semantic_map_files = sorted(list(semantic_maps_dir_path.glob("*.png")))
+    instance_map_files = sorted(list(instance_maps_dir_path.glob("*.png")))
+
+    # Generate panoptic maps
+    for semantic_map_file_path, instance_map_file_path in zip(
+        semantic_map_files, instance_map_files
+    ):
+        generate_deeplab2_panoptic_map(
+            semantic_map_file_path,
+            instance_map_file_path,
+            panoptic_maps_dir_path,
+            label_conversion_dict,
+        )
+    
+    # Delete semantic and instance maps
+    if remove_semantic:
+        shutil.rmtree(semantic_maps_dir_path)
+
+    if remove_instance:
+        shutil.rmtree(instance_maps_dir_path)
+
+
 def create_scannetv2_panoptic_maps(_):
     # Validate input args
     scans_root_dir_path = Path(FLAGS.scans_root_dir_path)
@@ -154,69 +228,16 @@ def create_scannetv2_panoptic_maps(_):
         label_conversion_master_table, FLAGS.labels_set
     )
 
+    job_fn = functools.partial(
+        create_panoptic_maps_for_scan,
+        label_conversion_dict=label_conversion_dict,
+        remove_semantic_and_instance=remove_semantic_and_instance,
+    )
+
     # Loop over all the scans
-    for scan_dir_path in scans_root_dir_path.iterdir():
-        if not scan_dir_path.is_dir():
-            continue
-
-        # Check if panoptic maps have already been created for this scans
-        if _scan_has_panoptic(scan_dir_path):
-            logging.warn(f"{scan_dir_path.name} already has panoptic!")
-            continue
-        panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
-        panoptic_maps_dir_path.mkdir(exist_ok=True)
-
-        semantic_maps_dir_path = scan_dir_path / _SEMANTIC_MAPS_DIR_NAME
-        instance_maps_dir_path = scan_dir_path / _INSTANCE_MAPS_DIR_NAME
-        remove_semantic = False or remove_semantic_and_instance
-        remove_instance = False or remove_semantic_and_instance
-        if not semantic_maps_dir_path.exists():
-            # If not found, try to extract the archive
-            semantic_maps_archive_path = scan_dir_path / (
-                scan_dir_path.stem + _SEMANTIC_MAPS_ARCHIVE_SUFFIX
-            )
-            if not semantic_maps_archive_path.exists():
-                logging.warn(
-                    '"label-filt" missing in scan {}. Skipped.'.format(
-                        str(scan_dir_path.name)
-                    )
-                )
-                continue
-            extract_zip_archive(semantic_maps_archive_path)
-            remove_semantic = True
-        if not instance_maps_dir_path.exists():
-            instance_maps_archive_path = scan_dir_path / (
-                scan_dir_path.stem + _INSTANCE_MAPS_ARCHIVE_SUFFIX
-            )
-            if not instance_maps_archive_path.exists():
-                logging.warn(
-                    '"instance-filt" missing in scan {}. Skipped.'.format(
-                        str(scan_dir_path.name)
-                    )
-                )
-                continue
-            extract_zip_archive(instance_maps_archive_path)
-            remove_instance = True
-
-        semantic_map_files = sorted(list(semantic_maps_dir_path.glob("*.png")))
-        instance_map_files = sorted(list(instance_maps_dir_path.glob("*.png")))
-
-        # Generate panoptic maps for all files with multithreading
-        job_fn = functools.partial(
-            generate_deeplab2_panoptic_map,
-            panoptic_maps_dir_path=panoptic_maps_dir_path,
-            label_conversion_dict=label_conversion_dict,
-        )
-
-        with multiprocessing.Pool(processes=n_jobs) as p:
-            p.starmap(job_fn, list(zip(semantic_map_files, instance_map_files)))
-
-        # Delete semantic and instance maps
-        if remove_semantic:
-            shutil.rmtree(semantic_maps_dir_path)
-
-        if remove_instance:
-            shutil.rmtree(instance_maps_dir_path)
+    scan_dir_paths = sorted(list(scans_root_dir_path.glob("scene*")))
+    with multiprocessing.Pool(processes=n_jobs) as p:
+        p.starmap(job_fn, scan_dir_paths)
 
 
 if __name__ == "__main__":
