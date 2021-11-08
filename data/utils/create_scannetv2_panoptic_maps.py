@@ -237,7 +237,7 @@ def create_scannetv2_panoptic_maps(_):
     # Loop over all the scans
     scan_dir_paths = sorted(list(scans_root_dir_path.glob("scene*")))
     with multiprocessing.Pool(processes=n_jobs) as p:
-        p.starmap(job_fn, scan_dir_paths)
+        p.map(job_fn, scan_dir_paths)
 
 
 if __name__ == "__main__":
