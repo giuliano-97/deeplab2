@@ -1,5 +1,6 @@
 import argparse
 import logging
+import math
 import re
 import shutil
 import tarfile
@@ -21,6 +22,7 @@ _TF_RECORD_PATTERN = "%s-%05d-of-%05d.tfrecord"
 _IMAGES_DIR_NAME = "color"
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 _SCANS_SEARCH_PATTERN = "scene*"
+_NUM_FRAMES_SEARCH_PATTERN = r"numColorFrames\s*=\s*(?P<num_frames>\w*)"
 
 
 def _load_image(image_file_path: Path):
@@ -84,13 +86,35 @@ def _remove_dirs(dir_paths: List[Path]):
         shutil.rmtree(dir_path)
 
 
+def _compute_total_number_of_frames(
+    scans_root_dir_path: Path,
+    scan_ids: int,
+) -> int:
+    cnt = 0
+    for scan_id in scan_ids:
+        scan_info_file_path = scans_root_dir_path / scan_id / f"{scan_id}.txt"
+        if not scan_info_file_path.exists():
+            logging.error(f"Scan info file missing in {scan_id}!")
+            continue
+        with scan_info_file_path.open("r") as f:
+            matches = re.findall(_NUM_FRAMES_SEARCH_PATTERN, f.read(), re.MULTILINE)
+            cnt += int(matches[0])
+    return cnt
+
+
 def _get_color_and_panoptic_per_shard(
     scans_root_dir_path: Path,
     scan_ids: Optional[List[str]],
+    num_shards: int,
     remove_files: bool = False,
 ):
     if scan_ids is None:
         scan_ids = _find_scans(scans_root_dir_path)
+
+    num_frames = _compute_total_number_of_frames(scans_root_dir_path, scan_ids)
+
+    num_examples_per_shard = math.ceil(math.ceil(num_frames / num_shards))
+
     color_and_panoptic_per_shard = []
     dirs_to_remove = []
     for i, scan_id in enumerate(scan_ids):
@@ -139,13 +163,16 @@ def _get_color_and_panoptic_per_shard(
                 (image_file_path, panoptic_map_file_path)
             )
 
-            shard_data = len(color_and_panoptic_per_shard) == 10 or (
+            shard_data = len(
+                color_and_panoptic_per_shard
+            ) == num_examples_per_shard or (
                 # Last image of the last scan in the list
                 j == len(image_file_paths)
                 and i == len(scan_ids)
             )
             if shard_data:
                 yield color_and_panoptic_per_shard
+                color_and_panoptic_per_shard = []
                 # Remove all the directories that can be removed
                 _remove_dirs(dirs_to_remove)
                 dirs_to_remove = []
@@ -211,6 +238,7 @@ def _create_tf_record_dataset(
     color_and_panoptic_per_shard = _get_color_and_panoptic_per_shard(
         scans_root_dir_path=scans_root_dir_path,
         scan_ids=scan_ids,
+        num_shards=num_shards,
         remove_files=remove_files,
     )
 
