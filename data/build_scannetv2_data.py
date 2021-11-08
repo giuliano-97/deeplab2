@@ -119,8 +119,8 @@ def _get_color_and_panoptic_per_shard(
     dirs_to_remove = []
     for i, scan_id in enumerate(scan_ids):
         scan_dir_path = scans_root_dir_path / scan_id
-        if not scan_dir_path.exists():
-            logging.warning(f"Scan {scan_id} does not exist!")
+        if not scan_dir_path.is_dir():
+            logging.warning(f"Scan dir {str(scan_dir_path)} does not exist!")
             continue
 
         remove_color_files = False or remove_files
