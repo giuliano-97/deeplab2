@@ -46,6 +46,18 @@ _SEMANTIC_MAPS_ARCHIVE_SUFFIX = "_2d-label-filt.zip"
 _SEMANTIC_MAPS_DIR_NAME = "label-filt"
 _INSTANCE_MAPS_ARCHIVE_SUFFIX = "_2d-instance-filt.zip"
 _INSTANCE_MAPS_DIR_NAME = "instance-filt"
+_PANOPTIC_MAPS_DIR_NAME = "panoptic"
+
+def _scan_has_panoptic(scan_dir_path: Path):
+    panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
+    if panoptic_maps_dir_path.exists() and any(panoptic_maps_dir_path.iterdir()):
+        return True
+
+    panoptic_maps_archive_path = panoptic_maps_dir_path.with_suffix(".tar.gz") 
+    if panoptic_maps_archive_path.exists():
+        return True
+
+    return False
 
 
 def extract_zip_archive(path_to_zip_archive: Path):
@@ -148,9 +160,10 @@ def create_scannetv2_panoptic_maps(_):
             continue
 
         # Check if panoptic maps have already been created for this scans
-        panoptic_maps_dir_path = scan_dir_path / "panoptic"
-        if panoptic_maps_dir_path.exists() and any(panoptic_maps_dir_path.iterdir()):
+        if _scan_has_panoptic(scan_dir_path):
+            logging.warn(f"{scan_dir_path.name} already has panoptic!")
             continue
+        panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
         panoptic_maps_dir_path.mkdir(exist_ok=True)
 
         semantic_maps_dir_path = scan_dir_path / _SEMANTIC_MAPS_DIR_NAME
