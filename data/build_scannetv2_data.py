@@ -101,7 +101,7 @@ def _compute_total_number_of_frames(
         scan_info_file_path = os.path.join(
             scans_root_dir_path, scan_id, f"{scan_id}.txt"
         )
-        if not tf.io.gfile.exists(str(scan_info_file_path)):
+        if not tf.io.gfile.exists(scan_info_file_path):
             logging.error(f"Scan info file missing in {scan_id}!")
             continue
         with tf.io.gfile.GFile(scan_info_file_path, "r") as f:
@@ -127,7 +127,7 @@ def _get_color_and_panoptic_per_shard(
     dirs_to_remove = []
     for i, scan_id in enumerate(scan_ids):
         scan_dir_path = os.path.join(scans_root_dir_path, scan_id)
-        if not tf.io.gfile.exists(scan_dir_path):
+        if not tf.io.gfile.isdir(scan_dir_path):
             logging.warning(f"Scan dir {str(scan_dir_path)} does not exist!")
             continue
 
@@ -145,7 +145,7 @@ def _get_color_and_panoptic_per_shard(
             remove_color_files = True
 
         panoptic_maps_dir_path = os.path.join(scan_dir_path, _PANOPTIC_MAPS_DIR_NAME)
-        if not tf.io.gfile.exists(panoptic_maps_dir_path):
+        if not tf.io.gfile.isdir(panoptic_maps_dir_path):
             panoptic_maps_archive_path = os.path.join(
                 scan_dir_path, f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
             )
