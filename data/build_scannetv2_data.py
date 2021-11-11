@@ -292,12 +292,6 @@ def _parse_args():
         help="Number of shards.",
     )
 
-    parser.add_argument(
-        "--remove_files",
-        action="store_true",
-        help="Remove raw images and panoptic maps.",
-    )
-
     return parser.parse_args()
 
 
@@ -309,5 +303,4 @@ if __name__ == "__main__":
         output_dir_path=args.output_dir_path,
         scan_ids_file_path=args.scan_ids_file_path,
         num_shards=args.num_shards,
-        remove_files=args.remove_files,
     )
