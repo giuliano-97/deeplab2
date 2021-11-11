@@ -56,7 +56,8 @@ def _extract_tar_archive(tar_archive_path: str):
 
 def _load_scan_ids_from_file(scan_ids_file_path: str) -> List[str]:
     with open(scan_ids_file_path, "r") as f:
-        return f.readlines()
+        scan_ids = f.readlines()
+    return [s.rstrip('\n') for s in scan_ids]
 
 
 def _find_scans(scans_root_dir: str) -> List[str]:
