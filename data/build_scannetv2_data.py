@@ -131,7 +131,7 @@ def _get_color_and_panoptic_per_shard(
         try:
             _extract_tar_archive(images_archive_path)
         except FileNotFoundError:
-            logging.warning(f"Scan {scan_id} color images not found. Skipped.")
+            logging.warning(f"{images_archive_path} not found. {scan_id} skipped.")
             continue
         images_dir_path = os.path.join(scan_dir_path, _IMAGES_DIR_NAME)
 
@@ -141,7 +141,7 @@ def _get_color_and_panoptic_per_shard(
         try:
             _extract_tar_archive(panoptic_maps_archive_path)
         except FileNotFoundError:
-            logging.warning(f"Scan {scan_id} panoptic_maps not found. Skipped.")
+            logging.warning(f"{panoptic_maps_archive_path} not found. {scan_id} skipped.")
             shutil.rmtree(str(images_dir_path))
             continue
 
