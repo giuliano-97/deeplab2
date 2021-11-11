@@ -61,6 +61,7 @@ def _load_scan_ids_from_file(scan_ids_file_path: str) -> List[str]:
 
 def _find_scans(scans_root_dir: str) -> List[str]:
     scan_dirs = glob.glob(os.path.join(scans_root_dir, _SCANS_SEARCH_PATTERN))
+    # TODO: use a regex to match the dirname with pattern scene[0-9]{4})_[0-9]{2}
     return [
         os.path.basename(scan_dir)
         for scan_dir in scan_dirs
@@ -112,12 +113,9 @@ def _compute_total_number_of_frames(
 
 def _get_color_and_panoptic_per_shard(
     scans_root_dir_path: str,
-    scan_ids: Optional[List[str]],
+    scan_ids: List[str],
     num_shards: int,
 ):
-    if scan_ids is None:
-        scan_ids = _find_scans(scans_root_dir_path)
-
     num_frames = _compute_total_number_of_frames(scans_root_dir_path, scan_ids)
 
     num_examples_per_shard = math.ceil(math.ceil(num_frames / num_shards))
@@ -127,7 +125,6 @@ def _get_color_and_panoptic_per_shard(
     for i, scan_id in enumerate(scan_ids):
         scan_dir_path = os.path.join(scans_root_dir_path, scan_id)
         images_archive_path = os.path.join(scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz")
-
         try:
             _extract_tar_archive(images_archive_path)
         except FileNotFoundError:
@@ -141,10 +138,11 @@ def _get_color_and_panoptic_per_shard(
         try:
             _extract_tar_archive(panoptic_maps_archive_path)
         except FileNotFoundError:
-            logging.warning(f"{panoptic_maps_archive_path} not found. {scan_id} skipped.")
+            logging.warning(
+                f"{panoptic_maps_archive_path} not found. {scan_id} skipped."
+            )
             shutil.rmtree(str(images_dir_path))
             continue
-
         panoptic_maps_dir_path = os.path.join(scan_dir_path, _PANOPTIC_MAPS_DIR_NAME)
 
         image_file_paths = list(glob.glob(os.path.join(images_dir_path, "*.jpg")))
@@ -222,9 +220,15 @@ def _create_tf_record_dataset(
 
     tf.io.gfile.makedirs(output_dir_path)
 
-    scan_ids = None
+    scan_ids = _find_scans(scans_root_dir_path)
     if scan_ids_file_path is not None:
-        scan_ids = _load_scan_ids_from_file(scan_ids_file_path)
+        scan_ids = list(
+            set(scan_ids) & set(_load_scan_ids_from_file(scan_ids_file_path))
+        )
+
+    if len(scan_ids) == 0:
+        logging.error("No scans found!")
+        exit(1)
 
     color_and_panoptic_per_shard = _get_color_and_panoptic_per_shard(
         scans_root_dir_path=scans_root_dir_path,
