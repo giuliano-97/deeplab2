@@ -27,7 +27,7 @@ _NUM_FRAMES_SEARCH_PATTERN = r"numColorFrames\s*=\s*(?P<num_frames>\w*)"
 
 
 def _load_image(image_file_path: str):
-    with tf.io.gfile.GFile(image_file_path, "rb") as f:
+    with open(image_file_path, "rb") as f:
         image_data = f.read()
     return image_data
 
@@ -41,7 +41,7 @@ def _load_panoptic_map(panoptic_map_path: str) -> Optional[str]:
     Returns:
       Panoptic map as an encoded int32 numpy array bytes or None if not existing.
     """
-    with tf.io.gfile.GFile(panoptic_map_path, "rb") as f:
+    with open(panoptic_map_path, "rb") as f:
         panoptic_map = np.array(Image.open(f)).astype(np.int32)
     return panoptic_map.tobytes()
 
@@ -55,7 +55,7 @@ def _extract_tar_archive(tar_archive_path: str):
 
 
 def _load_scan_ids_from_file(scan_ids_file_path: str) -> List[str]:
-    with tf.io.gfile.GFile(scan_ids_file_path, "r") as f:
+    with open(scan_ids_file_path, "r") as f:
         return f.readlines()
 
 
@@ -100,12 +100,13 @@ def _compute_total_number_of_frames(
         scan_info_file_path = os.path.join(
             scans_root_dir_path, scan_id, f"{scan_id}.txt"
         )
-        if not tf.io.gfile.exists(scan_info_file_path):
+        try:
+            with open(scan_info_file_path, "r") as f:
+                matches = re.findall(_NUM_FRAMES_SEARCH_PATTERN, f.read(), re.MULTILINE)
+                cnt += int(matches[0])
+        except FileNotFoundError:
             logging.error(f"Scan info file missing in {scan_id}!")
             continue
-        with tf.io.gfile.GFile(scan_info_file_path, "r") as f:
-            matches = re.findall(_NUM_FRAMES_SEARCH_PATTERN, f.read(), re.MULTILINE)
-            cnt += int(matches[0])
     return cnt
 
 
@@ -113,7 +114,6 @@ def _get_color_and_panoptic_per_shard(
     scans_root_dir_path: str,
     scan_ids: Optional[List[str]],
     num_shards: int,
-    remove_files: bool = False,
 ):
     if scan_ids is None:
         scan_ids = _find_scans(scans_root_dir_path)
@@ -126,35 +126,26 @@ def _get_color_and_panoptic_per_shard(
     dirs_to_remove = []
     for i, scan_id in enumerate(scan_ids):
         scan_dir_path = os.path.join(scans_root_dir_path, scan_id)
-        if not tf.io.gfile.isdir(scan_dir_path):
-            logging.warning(f"Scan dir {str(scan_dir_path)} does not exist!")
+        images_archive_path = os.path.join(scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz")
+
+        try:
+            _extract_tar_archive(images_archive_path)
+        except FileNotFoundError:
+            logging.warning(f"Scan {scan_id} color images not found. Skipped.")
+            continue
+        images_dir_path = os.path.join(scan_dir_path, _IMAGES_DIR_NAME)
+
+        panoptic_maps_archive_path = os.path.join(
+            scan_dir_path, f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
+        )
+        try:
+            _extract_tar_archive(panoptic_maps_archive_path)
+        except FileNotFoundError:
+            logging.warning(f"Scan {scan_id} panoptic_maps not found. Skipped.")
+            shutil.rmtree(str(images_dir_path))
             continue
 
-        remove_color_files = False or remove_files
-        remove_panoptic_files = False or remove_files
-        images_dir_path = os.path.join(scan_dir_path, _IMAGES_DIR_NAME)
-        if not tf.io.gfile.isdir(images_dir_path):
-            images_archive_path = os.path.join(
-                scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz"
-            )
-            if not tf.io.gfile.exists(images_archive_path):
-                logging.warning(f"Scan {scan_id} color images not found. Skipped.")
-                continue
-            _extract_tar_archive(images_archive_path)
-            remove_color_files = True
-
         panoptic_maps_dir_path = os.path.join(scan_dir_path, _PANOPTIC_MAPS_DIR_NAME)
-        if not tf.io.gfile.isdir(panoptic_maps_dir_path):
-            panoptic_maps_archive_path = os.path.join(
-                scan_dir_path, f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
-            )
-            if not tf.io.gfile.exists(panoptic_maps_archive_path):
-                if remove_color_files:
-                    shutil.rmtree(str(images_dir_path))
-                logging.warning(f"Scan {scan_id} panoptic_maps not found. Skipped.")
-                continue
-            _extract_tar_archive(panoptic_maps_archive_path)
-            remove_panoptic_files = True
 
         image_file_paths = list(glob.glob(os.path.join(images_dir_path, "*.jpg")))
         for j, image_file_path in enumerate(image_file_paths):
@@ -163,11 +154,6 @@ def _get_color_and_panoptic_per_shard(
                 panoptic_maps_dir_path,
                 (re.sub(r"0+(.+)", r"\1", image_file_name) + ".png"),
             )
-            if not tf.io.gfile.exists(panoptic_map_file_path):
-                logging.warning(
-                    f"Panoptic map not found for image {image_file_name} in scan {scan_id}"
-                )
-                continue
 
             color_and_panoptic_per_shard.append(
                 (image_file_path, panoptic_map_file_path)
@@ -187,11 +173,8 @@ def _get_color_and_panoptic_per_shard(
                 _remove_dirs(dirs_to_remove)
                 dirs_to_remove = []
 
-        if remove_color_files:
-            dirs_to_remove.append(images_dir_path)
-
-        if remove_panoptic_files:
-            dirs_to_remove.append(panoptic_maps_dir_path)
+        dirs_to_remove.append(images_dir_path)
+        dirs_to_remove.append(panoptic_maps_dir_path)
 
     # Clean up the last dirs
     _remove_dirs(dirs_to_remove)
@@ -234,7 +217,6 @@ def _create_tf_record_dataset(
     output_dir_path: str,
     num_shards: int,
     scan_ids_file_path: Optional[str],
-    remove_files: bool = False,
 ):
     assert tf.io.gfile.isdir(scans_root_dir_path)
 
@@ -242,14 +224,12 @@ def _create_tf_record_dataset(
 
     scan_ids = None
     if scan_ids_file_path is not None:
-        assert tf.io.gfile.exists(scan_ids_file_path)
         scan_ids = _load_scan_ids_from_file(scan_ids_file_path)
 
     color_and_panoptic_per_shard = _get_color_and_panoptic_per_shard(
         scans_root_dir_path=scans_root_dir_path,
         scan_ids=scan_ids,
         num_shards=num_shards,
-        remove_files=remove_files,
     )
 
     for shard_id, example_list in enumerate(color_and_panoptic_per_shard):
@@ -257,10 +237,13 @@ def _create_tf_record_dataset(
         shard_file_path = os.path.join(output_dir_path, shard_filename)
         with tf.io.TFRecordWriter(shard_file_path) as tfrecord_writer:
             for image_path, panoptic_map_path in example_list:
-                example = _create_panoptic_tfexample(
-                    image_path,
-                    panoptic_map_path,
-                )
+                try:
+                    example = _create_panoptic_tfexample(
+                        image_path,
+                        panoptic_map_path,
+                    )
+                except FileNotFoundError:
+                    continue
                 tfrecord_writer.write(example.SerializeToString())
 
 
