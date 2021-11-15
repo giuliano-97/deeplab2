@@ -161,6 +161,7 @@ def _create_panoptic_maps_for_scan(
     scan_dir_path: Path,
     label_conversion_dict: Dict,
     remove_semantic_and_instance: bool,
+    compress: bool,
 ):
     # Check if panoptic maps have already been created for this scans
     if _scan_has_panoptic(scan_dir_path):
@@ -222,6 +223,12 @@ def _create_panoptic_maps_for_scan(
     if remove_instance:
         shutil.rmtree(instance_maps_dir_path)
 
+    # Compress panoptic maps into a tar.gz archive
+    if compress:
+        archive_path = scan_dir_path / f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
+        cmd = f"tar --remove-files -czf {str(archive_path)} {str(panoptic_maps_dir_path)}"
+        os.system(cmd)
+
 
 def create_scannetv2_panoptic_maps(_):
     # Validate input args
@@ -249,6 +256,7 @@ def create_scannetv2_panoptic_maps(_):
         _create_panoptic_maps_for_scan,
         label_conversion_dict=label_conversion_dict,
         remove_semantic_and_instance=remove_semantic_and_instance,
+        compress=FLAGS.compress,
     )
     with multiprocessing.Pool(processes=n_jobs) as p:
         p.map(job_fn, scan_dir_paths)
