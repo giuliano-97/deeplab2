@@ -52,7 +52,7 @@ _INSTANCE_MAPS_ARCHIVE_SUFFIX = "_2d-instance-filt.zip"
 _INSTANCE_MAPS_DIR_NAME = "instance-filt"
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 
-_NYU40_STUFF_CLASSES = [1, 3, 22]
+_NYU40_STUFF_CLASSES = [1, 2, 22]
 
 
 def _scan_has_panoptic(scan_dir_path: Path):
