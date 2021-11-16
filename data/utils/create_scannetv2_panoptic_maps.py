@@ -225,8 +225,7 @@ def _create_panoptic_maps_for_scan(
 
     # Compress panoptic maps into a tar.gz archive
     if compress:
-        archive_path = scan_dir_path / f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
-        cmd = f"tar --remove-files -czf {str(archive_path)} {str(panoptic_maps_dir_path)}"
+        cmd = f"cd {str(scan_dir_path.absolute())} && tar --remove-files -czf {_PANOPTIC_MAPS_DIR_NAME}.tar.gz {_PANOPTIC_MAPS_DIR_NAME}"
         os.system(cmd)
 
 
