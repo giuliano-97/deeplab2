@@ -93,28 +93,32 @@ def create_label_conversion_dict(label_conversion_table: pd.DataFrame, labels_se
 def normalize_instance_map(
     instance_map: np.ndarray, semantic_map: np.array, stuff_classes: List[int]
 ):
-    # Convert the instance id of all stuff classes to zero first
-    instance_map[np.isin(semantic_map, stuff_classes)] = 0
+    normalized_instance_map = np.zeros_like(instance_map)
 
-    # Convert instance ids so they start from 0
-    instance_ids = np.unique(instance_map).tolist()
-    # Remove 0 if present
-    try:
-        instance_ids.remove(0)
-    except ValueError:
-        pass
+    for class_id in np.unique(semantic_map):
+        if class_id == 0 or class_id in stuff_classes:
+            continue
+        # Get mask for the current class
+        class_mask = semantic_map == class_id
 
-    # Generate new instance ids starting from 1
-    new_instance_ids = list(range(1, len(instance_ids) + 1))
+        # Get all the unique instance ids
+        instance_ids = np.unique(instance_map[class_mask]).tolist()
 
-    # Create conversion dict
-    conversion_dict = dict(zip(instance_ids, new_instance_ids))
+        # Remove 0 just in case
+        try:
+            instance_ids.remove(0)
+        except ValueError:
+            pass
 
-    # Add 0 to 0 mapping to use vectorize
-    conversion_dict.update({0: 0})
+        # Remap instance ids so they are 1-indexed
+        new_instance_ids = list(range(1, len(instance_ids) + 1))
 
-    # Now convert the instance map
-    return np.vectorize(conversion_dict.get)(instance_map)
+        # Create new instance
+        for i, old_id in enumerate(instance_ids):
+            instance_mask = np.logical_and(class_mask, instance_map == old_id)
+            normalized_instance_map[instance_mask] = new_instance_ids[i]
+
+    return normalized_instance_map
 
 
 def make_panoptic_from_semantic_and_instance(
@@ -238,6 +242,7 @@ def create_scannetv2_panoptic_maps(_):
     n_jobs = FLAGS.jobs
     assert n_jobs > 0
     remove_semantic_and_instance = FLAGS.remove_semantic_and_instance
+    compress = FLAGS.compress
 
     # Load the labels conversion table - use the scannetv2 id as index
     label_conversion_master_table = pd.read_csv(str(labels_tsv_path), sep="\t")
@@ -250,15 +255,24 @@ def create_scannetv2_panoptic_maps(_):
         p for p in sorted(list(scans_root_dir_path.glob("scene*"))) if p.is_dir()
     ]
 
-    # Create panoptic maps for every directory in parallel
-    job_fn = functools.partial(
-        _create_panoptic_maps_for_scan,
-        label_conversion_dict=label_conversion_dict,
-        remove_semantic_and_instance=remove_semantic_and_instance,
-        compress=FLAGS.compress,
-    )
-    with multiprocessing.Pool(processes=n_jobs) as p:
-        p.map(job_fn, scan_dir_paths)
+    if n_jobs > 1:
+        # Create panoptic maps for every directory in parallel
+        job_fn = functools.partial(
+            _create_panoptic_maps_for_scan,
+            label_conversion_dict=label_conversion_dict,
+            remove_semantic_and_instance=remove_semantic_and_instance,
+            compress=compress,
+        )
+        with multiprocessing.Pool(processes=n_jobs) as p:
+            p.map(job_fn, scan_dir_paths)
+    else:
+        for scan_dir_path in scan_dir_paths:
+            _create_panoptic_maps_for_scan(
+                scan_dir_path,
+                label_conversion_dict,
+                remove_semantic_and_instance,
+                compress,
+            )
 
 
 if __name__ == "__main__":
