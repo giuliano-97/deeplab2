@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import PIL
 import tensorflow as tf
-from data.utils.create_scannetv2_panoptic_maps import create_label_conversion_dict
 
 from deeplab2.data import coco_constants
 
@@ -396,7 +395,7 @@ def create_scannetv2_nyu40_label_colormap():
     A colormap for visualizing segmentation results.
   """
   colormap = np.zeros((256, 3), dtype=np.uint8)
-  colormap[0] = [128, 64, 128]
+  colormap[0] = [0, 0, 0]
   colormap[1] = [244, 35, 232]
   colormap[2] = [70, 70, 70]
   colormap[3] = [102, 102, 156]
@@ -436,6 +435,7 @@ def create_scannetv2_nyu40_label_colormap():
   colormap[37] = [119, 11, 32]
   colormap[38] = [119, 11, 32]
   colormap[39] = [119, 11, 32]
+  colormap[40] = [128, 64, 128]
   return colormap
 
 
