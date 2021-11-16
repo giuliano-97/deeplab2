@@ -125,26 +125,27 @@ def _get_color_and_panoptic_per_shard(
     dirs_to_remove = []
     for i, scan_id in enumerate(scan_ids):
         scan_dir_path = os.path.join(scans_root_dir_path, scan_id)
-        images_archive_path = os.path.join(scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz")
-        try:
-            _extract_tar_archive(images_archive_path)
-        except FileNotFoundError:
-            logging.warning(f"{images_archive_path} not found. {scan_id} skipped.")
-            continue
         images_dir_path = os.path.join(scan_dir_path, _IMAGES_DIR_NAME)
+        if not os.path.exists(images_dir_path):
+            images_archive_path = os.path.join(scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz")
+            if not os.path.exists(images_archive_path):
+                logging.warning(f"{images_archive_path} not found. {scan_id} skipped.")
+                continue
+            _extract_tar_archive(images_archive_path)
+            dirs_to_remove.append(images_dir_path)
 
-        panoptic_maps_archive_path = os.path.join(
-            scan_dir_path, f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
-        )
-        try:
-            _extract_tar_archive(panoptic_maps_archive_path)
-        except FileNotFoundError:
-            logging.warning(
-                f"{panoptic_maps_archive_path} not found. {scan_id} skipped."
-            )
-            shutil.rmtree(str(images_dir_path))
-            continue
         panoptic_maps_dir_path = os.path.join(scan_dir_path, _PANOPTIC_MAPS_DIR_NAME)
+        if not os.path.exists(panoptic_maps_dir_path):
+            panoptic_maps_archive_path = os.path.join(
+                scan_dir_path, f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
+            )
+            if not os.path.exists(panoptic_maps_archive_path):
+                logging.warning(
+                    f"{panoptic_maps_archive_path} not found. {scan_id} skipped."
+                )
+                continue
+            _extract_tar_archive(panoptic_maps_archive_path)
+            dirs_to_remove.append(panoptic_maps_dir_path)
 
         image_file_paths = list(glob.glob(os.path.join(images_dir_path, "*.jpg")))
         for j, image_file_path in enumerate(image_file_paths):
