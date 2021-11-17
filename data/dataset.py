@@ -259,7 +259,7 @@ SCANNET_FRAMES_25K_NYU40_INFORMATION = (
     # The ignore class is also included
     num_classes=41,
     ignore_label=0,
-    panoptic_label_divisor=255,
+    panoptic_label_divisor=1000,
     class_has_instances_list=tuple(
         [
             i
