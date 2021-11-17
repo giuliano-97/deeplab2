@@ -24,7 +24,7 @@ _IMAGES_DIR_NAME = "color"
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 _SCANS_SEARCH_PATTERN = "scene*"
 _NUM_FRAMES_SEARCH_PATTERN = r"numColorFrames\s*=\s*(?P<num_frames>\w*)"
-_NUM_EXAMPLES_PER_SHARD = 1000
+_NUM_EXAMPLES_PER_SHARD = 500
 
 
 def _load_image(image_file_path: str):
@@ -130,6 +130,7 @@ def _compute_total_number_of_frames(
 def _get_color_and_panoptic_per_shard(
     scans_root_dir_path: str,
     scan_ids: List[str],
+    num_examples_per_shard: int,
 ):
     color_and_panoptic_per_shard = []
     dirs_to_remove = []
@@ -184,7 +185,7 @@ def _get_color_and_panoptic_per_shard(
 
             shard_data = len(
                 color_and_panoptic_per_shard
-            ) == _NUM_EXAMPLES_PER_SHARD or (
+            ) == num_examples_per_shard or (
                 # Last frame of the last scan in the list
                 j == len(image_file_paths) - 1
                 and i == len(scan_ids) - 1
@@ -235,6 +236,7 @@ def _create_tf_record_dataset(
     scans_root_dir_path: str,
     dataset_tag: str,
     output_dir_path: str,
+    num_examples_per_shard: int,
     scan_ids_file_path: Optional[str],
 ):
     assert tf.io.gfile.isdir(scans_root_dir_path)
@@ -253,13 +255,14 @@ def _create_tf_record_dataset(
 
     # Compute the number of shards to create
     num_frames = _compute_total_number_of_frames(scans_root_dir_path, scan_ids)
-    num_shards = math.ceil(num_frames / _NUM_EXAMPLES_PER_SHARD)
+    num_shards = math.ceil(num_frames / num_examples_per_shard)
 
     logging.info(f"Found {num_frames} frames. {num_shards} will be created.")
 
     color_and_panoptic_per_shard = _get_color_and_panoptic_per_shard(
         scans_root_dir_path=scans_root_dir_path,
         scan_ids=scan_ids,
+        num_examples_per_shard=num_examples_per_shard,
     )
 
     for shard_id, example_list in enumerate(color_and_panoptic_per_shard):
@@ -315,6 +318,14 @@ def _parse_args():
         help="Path to a text file with the ids of the scans to consider.",
     )
 
+    parser.add_argument(
+        "-nes",
+        "--num_examples_per_shard",
+        type=int,
+        default=_NUM_EXAMPLES_PER_SHARD,
+        help="Number of examples per shard.",
+    )
+
     return parser.parse_args()
 
 
@@ -324,5 +335,6 @@ if __name__ == "__main__":
         scans_root_dir_path=args.scans_root_dir_path,
         dataset_tag=args.dataset_tag,
         output_dir_path=args.output_dir_path,
+        num_examples_per_shard=args.num_examples_per_shard,
         scan_ids_file_path=args.scan_ids_file_path,
     )
