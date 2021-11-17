@@ -43,9 +43,12 @@ flags.DEFINE_integer(name="jobs", default=2, help="Number of parallel jobs")
 # Same as Cityscapes
 _LABEL_DIVISOR = 255
 _SEMANTIC_MAPS_ARCHIVE_SUFFIX = "_2d-label-filt.zip"
-_SEMANTIC_MAPS_DIR_NAME = "label-filt"
 _INSTANCE_MAPS_ARCHIVE_SUFFIX = "_2d-instance-filt.zip"
+_SEMANTIC_MAPS_DIR_NAME = "label-filt"
 _INSTANCE_MAPS_DIR_NAME = "instance-filt"
+_SEMANTIC_MAPS_DIR_NAME_SCANNET_FRAMES_25K = "label"
+_INSTANCE_MAPS_DIR_NAME_SCANNET_FRAMES_25K = "instance"
+
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 
 _NYU40_STUFF_CLASSES = [1, 2, 22]
@@ -70,10 +73,17 @@ def _extract_zip_archive(path_to_zip_archive: Path):
     archive.extractall(str(extract_dir))
 
 
-def _convert_semantic_map_labels(semantic_map: np.ndarray, label_conversion_dict: Dict):
+def _convert_semantic_map_labels(
+    semantic_map: np.ndarray,
+    label_conversion_dict: Dict,
+):
     return np.vectorize(label_conversion_dict.get)(semantic_map)
 
-def _decode_instance_map(instance_map: np.ndarray, semantic_map: np.ndarray):
+
+def _decode_scannet_frames_25k_instance_map(
+    instance_map: np.ndarray,
+    semantic_map: np.ndarray,
+):
     return instance_map - _SCANNET_25K_INSTANCE_DIVISOR * semantic_map
 
 
@@ -108,7 +118,7 @@ def _normalize_instance_map(
     return normalized_instance_map
 
 
-def make_panoptic_from_semantic_and_instance(
+def _make_panoptic_from_semantic_and_instance(
     semantic_map: np.ndarray,
     instance_map: np.ndarray,
 ):
@@ -133,7 +143,9 @@ def generate_deeplab2_panoptic_map(
         )
 
     if is_scannet_frames_25k:
-        instance_map = _decode_instance_map(instance_map, semantic_map)
+        instance_map = _decode_scannet_frames_25k_instance_map(
+            instance_map, semantic_map
+        )
 
     # Normalize the instance map so that all the instance ids are between 1 and #instances
     if not is_scannet_frames_25k:
@@ -144,7 +156,7 @@ def generate_deeplab2_panoptic_map(
         )
 
     # Make panoptic map
-    panoptic_map = make_panoptic_from_semantic_and_instance(
+    panoptic_map = _make_panoptic_from_semantic_and_instance(
         semantic_map,
         instance_map,
     )
@@ -161,6 +173,18 @@ def _create_panoptic_maps_for_scan(
     remove_semantic_and_instance: bool,
     compress: bool,
 ):
+    semantic_maps_dir_name = (
+        _SEMANTIC_MAPS_DIR_NAME_SCANNET_FRAMES_25K
+        if is_scannet_frames_25k
+        else _SEMANTIC_MAPS_DIR_NAME
+    )
+
+    instance_maps_dir_name = (
+        _INSTANCE_MAPS_DIR_NAME_SCANNET_FRAMES_25K
+        if is_scannet_frames_25k
+        else _INSTANCE_MAPS_DIR_NAME
+    )
+
     # Check if panoptic maps have already been created for this scans
     if _scan_has_panoptic(scan_dir_path):
         logging.warning(f"{scan_dir_path.name} already has panoptic!")
@@ -168,8 +192,8 @@ def _create_panoptic_maps_for_scan(
     panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
     panoptic_maps_dir_path.mkdir(exist_ok=True)
 
-    semantic_maps_dir_path = scan_dir_path / _SEMANTIC_MAPS_DIR_NAME
-    instance_maps_dir_path = scan_dir_path / _INSTANCE_MAPS_DIR_NAME
+    semantic_maps_dir_path = scan_dir_path / semantic_maps_dir_name
+    instance_maps_dir_path = scan_dir_path / instance_maps_dir_name
     remove_semantic = False or remove_semantic_and_instance
     remove_instance = False or remove_semantic_and_instance
     if not semantic_maps_dir_path.exists():
