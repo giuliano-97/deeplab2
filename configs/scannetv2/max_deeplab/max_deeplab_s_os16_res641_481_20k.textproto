@@ -28,7 +28,7 @@ experiment_name: "max_deeplab_s_scannetv2_test"
 model_options {
   # Update the path to the initial checkpoint (e.g., ImageNet
   # pretrained checkpoint).
-  initial_checkpoint: "${INIT_CHECKPOINT}"
+  initial_checkpoint: "/cluster/work/riner/users/albanesg/checkpoints/maxdeeplab_pretrained/max_deeplab_s_backbone_imagenet1k_strong_training_strategy/ckpt-350"
   backbone {
     name: "max_deeplab_s"
     output_stride: 16
@@ -57,15 +57,15 @@ model_options {
       channels_project: 32
     }
     auxiliary_semantic_head {
-      output_channels: 134
+      output_channels: 41
       head_channels: 256
     }
   }
 }
 trainer_options {
-  save_checkpoints_steps: 1000
-  save_summaries_steps: 100
-  steps_per_loop: 100
+  save_checkpoints_steps: 5000
+  save_summaries_steps: 1000
+  steps_per_loop: 1000
   loss_options {
     semantic_loss {
       name: "softmax_cross_entropy"
@@ -83,20 +83,20 @@ trainer_options {
   }
   solver_options {
     base_learning_rate: 0.001
-    training_number_of_steps: 100000
+    training_number_of_steps: 20000
     warmup_steps: 5000
     backbone_learning_rate_multiplier: 0.1
   }
 }
 train_dataset_options {
-  dataset: "scannetv2"
-  file_pattern: "${TRAIN_SET}"
+  dataset: "scannetv2_nyu40"
+  file_pattern: "/cluster/work/riner/users/albanesg/scannetv2_tf_record/train_00/scanetv2-train-00-*-of-01000.tfrecord"
   # Adjust the batch_size accordingly to better fit your GPU/TPU memory.
   # Also see Q1 in g3doc/faq.md.
-  batch_size: 64
+  batch_size: 24
+  crop_size: 481
   crop_size: 641
-  crop_size: 641
-  min_resize_value: 641
+  max_resize_value: 481
   max_resize_value: 641
   augmentations {
     min_scale_factor: 0.5
@@ -109,13 +109,13 @@ train_dataset_options {
   thing_id_mask_annotations: true
 }
 eval_dataset_options {
-  dataset: "scannetv2"
+  dataset: "scannetv2_nyu40"
   # Update the path to validation set.
-  file_pattern: "${VAL_SET}"
+  file_pattern: "/cluster/work/riner/users/albanesg/scannetv2_tf_record/train_00/scanetv2-train-00-0000*-of-01000.tfrecord"
   batch_size: 1
+  crop_size: 481
   crop_size: 641
-  crop_size: 641
-  min_resize_value: 641
+  max_resize_value: 481
   max_resize_value: 641
   # Add options to make the evaluation loss comparable to the training loss.
   increase_small_instance_weights: false
