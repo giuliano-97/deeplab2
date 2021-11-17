@@ -173,9 +173,6 @@ def _get_color_and_panoptic_per_shard(
                 _remove_dirs(dirs_to_remove)
                 dirs_to_remove = []
 
-        dirs_to_remove.append(images_dir_path)
-        dirs_to_remove.append(panoptic_maps_dir_path)
-
     # Clean up the last dirs
     _remove_dirs(dirs_to_remove)
 
