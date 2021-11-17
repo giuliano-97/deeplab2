@@ -163,9 +163,20 @@ def _get_color_and_panoptic_per_shard(
         for j, image_file_path in enumerate(image_file_paths):
             image_file_name = os.path.splitext(os.path.basename(image_file_path))[0]
             panoptic_map_file_path = os.path.join(
-                panoptic_maps_dir_path,
-                (re.sub(r"0+(.+)", r"\1", image_file_name) + ".png"),
+                panoptic_maps_dir_path, image_file_name + ".png"
             )
+            # If it does exist, try to remove the leading zeros
+            if not os.path.exists(panoptic_map_file_path):
+                panoptic_map_file_path = os.path.join(
+                    panoptic_maps_dir_path,
+                    (re.sub(r"0+(.+)", r"\1", image_file_name) + ".png"),
+                )
+            # If it still does exist, skip it
+            if not os.path.exists(panoptic_map_file_path):
+                logging.error(
+                    f"Panoptic labels not found for {str(image_file_path)}. Skipped."
+                )
+                continue
 
             color_and_panoptic_per_shard.append(
                 (image_file_path, panoptic_map_file_path)
@@ -244,6 +255,8 @@ def _create_tf_record_dataset(
     num_frames = _compute_total_number_of_frames(scans_root_dir_path, scan_ids)
     num_shards = math.ceil(num_frames / _NUM_EXAMPLES_PER_SHARD)
 
+    logging.info(f"Found {num_frames} frames. {num_shards} will be created.")
+
     color_and_panoptic_per_shard = _get_color_and_panoptic_per_shard(
         scans_root_dir_path=scans_root_dir_path,
         scan_ids=scan_ids,
@@ -259,7 +272,8 @@ def _create_tf_record_dataset(
                         image_path,
                         panoptic_map_path,
                     )
-                except FileNotFoundError:
+                except FileNotFoundError as e:
+                    logging.error(f"{str(e)}")
                     continue
                 tfrecord_writer.write(example.SerializeToString())
 
