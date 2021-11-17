@@ -24,6 +24,7 @@ _IMAGES_DIR_NAME = "color"
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 _SCANS_SEARCH_PATTERN = "scene*"
 _NUM_FRAMES_SEARCH_PATTERN = r"numColorFrames\s*=\s*(?P<num_frames>\w*)"
+_NUM_EXAMPLES_PER_SHARD = 1000
 
 
 def _load_image(image_file_path: str):
@@ -57,7 +58,7 @@ def _extract_tar_archive(tar_archive_path: str):
 def _load_scan_ids_from_file(scan_ids_file_path: str) -> List[str]:
     with open(scan_ids_file_path, "r") as f:
         scan_ids = f.readlines()
-    return [s.rstrip('\n') for s in scan_ids]
+    return [s.rstrip("\n") for s in scan_ids]
 
 
 def _find_scans(scans_root_dir: str) -> List[str]:
@@ -102,32 +103,43 @@ def _compute_total_number_of_frames(
         scan_info_file_path = os.path.join(
             scans_root_dir_path, scan_id, f"{scan_id}.txt"
         )
-        try:
+        if os.path.exists(scan_info_file_path):
             with open(scan_info_file_path, "r") as f:
                 matches = re.findall(_NUM_FRAMES_SEARCH_PATTERN, f.read(), re.MULTILINE)
                 cnt += int(matches[0])
-        except FileNotFoundError:
-            logging.error(f"Scan info file missing in {scan_id}!")
-            continue
+        else:
+            logging.warning(
+                f"Scan info file missing in {scan_id}! "
+                "Trying to infer frames count from color images directory."
+            )
+            images_dir_path = os.path.join(
+                scans_root_dir_path, scan_id, _IMAGES_DIR_NAME
+            )
+            if os.path.exists(images_dir_path):
+                cnt += len(os.listdir(images_dir_path))
+            else:
+                logging.error(
+                    "Color images dir not found. "
+                    f"Frames count could not be inferred for {scan_id}!"
+                )
+                continue
+
     return cnt
 
 
 def _get_color_and_panoptic_per_shard(
     scans_root_dir_path: str,
     scan_ids: List[str],
-    num_shards: int,
 ):
-    num_frames = _compute_total_number_of_frames(scans_root_dir_path, scan_ids)
-
-    num_examples_per_shard = math.ceil(math.ceil(num_frames / num_shards))
-
     color_and_panoptic_per_shard = []
     dirs_to_remove = []
     for i, scan_id in enumerate(scan_ids):
         scan_dir_path = os.path.join(scans_root_dir_path, scan_id)
         images_dir_path = os.path.join(scan_dir_path, _IMAGES_DIR_NAME)
         if not os.path.exists(images_dir_path):
-            images_archive_path = os.path.join(scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz")
+            images_archive_path = os.path.join(
+                scan_dir_path, f"{_IMAGES_DIR_NAME}.tar.gz"
+            )
             if not os.path.exists(images_archive_path):
                 logging.warning(f"{images_archive_path} not found. {scan_id} skipped.")
                 continue
@@ -161,10 +173,10 @@ def _get_color_and_panoptic_per_shard(
 
             shard_data = len(
                 color_and_panoptic_per_shard
-            ) == num_examples_per_shard or (
-                # Last image of the last scan in the list
-                j == len(image_file_paths)
-                and i == len(scan_ids)
+            ) == _NUM_EXAMPLES_PER_SHARD or (
+                # Last frame of the last scan in the list
+                j == len(image_file_paths) - 1
+                and i == len(scan_ids) - 1
             )
             if shard_data:
                 yield color_and_panoptic_per_shard
@@ -212,7 +224,6 @@ def _create_tf_record_dataset(
     scans_root_dir_path: str,
     dataset_tag: str,
     output_dir_path: str,
-    num_shards: int,
     scan_ids_file_path: Optional[str],
 ):
     assert tf.io.gfile.isdir(scans_root_dir_path)
@@ -229,10 +240,13 @@ def _create_tf_record_dataset(
         logging.error("No scans found!")
         exit(1)
 
+    # Compute the number of shards to create
+    num_frames = _compute_total_number_of_frames(scans_root_dir_path, scan_ids)
+    num_shards = math.ceil(num_frames / _NUM_EXAMPLES_PER_SHARD)
+
     color_and_panoptic_per_shard = _get_color_and_panoptic_per_shard(
         scans_root_dir_path=scans_root_dir_path,
         scan_ids=scan_ids,
-        num_shards=num_shards,
     )
 
     for shard_id, example_list in enumerate(color_and_panoptic_per_shard):
@@ -287,14 +301,6 @@ def _parse_args():
         help="Path to a text file with the ids of the scans to consider.",
     )
 
-    parser.add_argument(
-        "-ns",
-        "--num_shards",
-        type=int,
-        default=1000,
-        help="Number of shards.",
-    )
-
     return parser.parse_args()
 
 
@@ -305,5 +311,4 @@ if __name__ == "__main__":
         dataset_tag=args.dataset_tag,
         output_dir_path=args.output_dir_path,
         scan_ids_file_path=args.scan_ids_file_path,
-        num_shards=args.num_shards,
     )
