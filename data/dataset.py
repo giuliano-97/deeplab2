@@ -93,56 +93,59 @@ import collections
 
 
 # Dataset names.
-_CITYSCAPES_PANOPTIC = 'cityscapes_panoptic'
-_KITTI_STEP = 'kitti_step'
-_MOTCHALLENGE_STEP = 'motchallenge_step'
-_CITYSCAPES_DVPS = 'cityscapes_dvps'
-_SEMKITTI_DVPS = 'semkitti_dvps'
-_COCO_PANOPTIC = 'coco_panoptic'
+_CITYSCAPES_PANOPTIC = "cityscapes_panoptic"
+_KITTI_STEP = "kitti_step"
+_MOTCHALLENGE_STEP = "motchallenge_step"
+_CITYSCAPES_DVPS = "cityscapes_dvps"
+_SEMKITTI_DVPS = "semkitti_dvps"
+_COCO_PANOPTIC = "coco_panoptic"
 _SCANNETV2_NYU40 = "scannetv2_nyu40"
+_SCANNET_FRAMES_25K_NYU40 = "scannet_frames_25k"
 
 # Colormap names.
-_CITYSCAPES_COLORMAP = 'cityscapes'
-_MOTCHALLENGE_COLORMAP = 'motchallenge'
-_COCO_COLORMAP = 'coco'
-_SCANNETV2_NYU40_COLORMAP = 'scannetv2_nyu40'
+_CITYSCAPES_COLORMAP = "cityscapes"
+_MOTCHALLENGE_COLORMAP = "motchallenge"
+_COCO_COLORMAP = "coco"
+_SCANNETV2_NYU40_COLORMAP = "scannetv2_nyu40"
 
 
 # Named tuple to describe dataset properties.
 DatasetDescriptor = collections.namedtuple(
-    'DatasetDescriptor', [
-        'dataset_name',  # Dataset name.
-        'splits_to_sizes',  # Splits of the dataset into training, val and test.
-        'num_classes',   # Number of semantic classes.
-        'ignore_label',  # Ignore label value used for semantic segmentation.
-
+    "DatasetDescriptor",
+    [
+        "dataset_name",  # Dataset name.
+        "splits_to_sizes",  # Splits of the dataset into training, val and test.
+        "num_classes",  # Number of semantic classes.
+        "ignore_label",  # Ignore label value used for semantic segmentation.
         # Fields below are used for panoptic segmentation and will be None for
         # Semantic segmentation datasets.
         # Label divisor only used in panoptic segmentation annotation to infer
         # semantic label and instance id.
-        'panoptic_label_divisor',
+        "panoptic_label_divisor",
         # A tuple of classes that contains instance annotations. For example,
         # 'person' class has instance annotations while 'sky' does not.
-        'class_has_instances_list',
+        "class_has_instances_list",
         # A flag indicating whether the dataset is a video dataset that contains
         # sequence IDs and frame IDs.
-        'is_video_dataset',
+        "is_video_dataset",
         # A string specifying the colormap that should be used for
         # visualization. E.g. 'cityscapes'.
-        'colormap',
+        "colormap",
         # A flag indicating whether the dataset contains depth annotation.
-        'is_depth_dataset',
+        "is_depth_dataset",
         # The ignore label for depth annotations.
-        'ignore_depth',
-    ]
+        "ignore_depth",
+    ],
 )
 
 CITYSCAPES_PANOPTIC_INFORMATION = DatasetDescriptor(
     dataset_name=_CITYSCAPES_PANOPTIC,
-    splits_to_sizes={'train_fine': 2975,
-                     'val_fine': 500,
-                     'trainval_fine': 3475,
-                     'test_fine': 1525},
+    splits_to_sizes={
+        "train_fine": 2975,
+        "val_fine": 500,
+        "trainval_fine": 3475,
+        "test_fine": 1525,
+    },
     num_classes=19,
     ignore_label=255,
     panoptic_label_divisor=1000,
@@ -155,9 +158,7 @@ CITYSCAPES_PANOPTIC_INFORMATION = DatasetDescriptor(
 
 KITTI_STEP_INFORMATION = DatasetDescriptor(
     dataset_name=_KITTI_STEP,
-    splits_to_sizes={'train': 5027,
-                     'val': 2981,
-                     'test': 11095},
+    splits_to_sizes={"train": 5027, "val": 2981, "test": 11095},
     num_classes=19,
     ignore_label=255,
     panoptic_label_divisor=1000,
@@ -170,9 +171,7 @@ KITTI_STEP_INFORMATION = DatasetDescriptor(
 
 MOTCHALLENGE_STEP_INFORMATION = DatasetDescriptor(
     dataset_name=_MOTCHALLENGE_STEP,
-    splits_to_sizes={'train': 525,  # Sequence 9.
-                     'val': 600,  # Sequence 2.
-                     'test': 0},
+    splits_to_sizes={"train": 525, "val": 600, "test": 0},  # Sequence 9.  # Sequence 2.
     num_classes=7,
     ignore_label=255,
     panoptic_label_divisor=1000,
@@ -189,9 +188,7 @@ CITYSCAPES_DVPS_INFORMATION = DatasetDescriptor(
     # sizes are the number of consecutive frame pairs. As each sequence has 6
     # frames, the number of pairs for the train split is 2400 / 6 * 5 = 2000.
     # Similarly, we get 250 pairs for the val split and the test split.
-    splits_to_sizes={'train': 2000,
-                     'val': 250,
-                     'test': 250},
+    splits_to_sizes={"train": 2000, "val": 250, "test": 250},
     num_classes=19,
     ignore_label=255,
     panoptic_label_divisor=1000,
@@ -204,9 +201,7 @@ CITYSCAPES_DVPS_INFORMATION = DatasetDescriptor(
 
 SEMKITTI_DVPS_INFORMATION = DatasetDescriptor(
     dataset_name=_SEMKITTI_DVPS,
-    splits_to_sizes={'train': 19120,
-                     'val': 4070,
-                     'test': 4340},
+    splits_to_sizes={"train": 19120, "val": 4070, "test": 4340},
     num_classes=19,
     ignore_label=255,
     panoptic_label_divisor=65536,
@@ -220,9 +215,7 @@ SEMKITTI_DVPS_INFORMATION = DatasetDescriptor(
 
 COCO_PANOPTIC_INFORMATION = DatasetDescriptor(
     dataset_name=_COCO_PANOPTIC,
-    splits_to_sizes={'train': 118287,
-                     'val': 5000,
-                     'test': 40670},
+    splits_to_sizes={"train": 118287, "val": 5000, "test": 40670},
     num_classes=134,
     ignore_label=0,
     panoptic_label_divisor=256,
@@ -235,20 +228,50 @@ COCO_PANOPTIC_INFORMATION = DatasetDescriptor(
 
 SCANNETV2_NYU40_INFORMATION = DatasetDescriptor(
     dataset_name=_SCANNETV2_NYU40,
-    splits_to_sizes={'train': 2500000,
-                     'val': 200000,
-                     'test': 20000},
+    splits_to_sizes={"train": 2500000, "val": 200000, "test": 20000},
     # The ignore class is also included
     num_classes=41,
     ignore_label=0,
     panoptic_label_divisor=255,
-    class_has_instances_list=tuple([
-      i for i in range(1, 41) if i not in [
-        1,  # wall
-        2,  # floor
-        22, # ceiling
-      ]
-    ]),
+    class_has_instances_list=tuple(
+        [
+            i
+            for i in range(1, 41)
+            if i
+            not in [
+                1,  # wall
+                2,  # floor
+                22,  # ceiling
+            ]
+        ]
+    ),
+    is_video_dataset=False,
+    colormap=_SCANNETV2_NYU40_COLORMAP,
+    is_depth_dataset=False,
+    ignore_depth=None,
+)
+
+SCANNET_FRAMES_25K_NYU40_INFORMATION = (
+    SCANNETV2_NYU40_INFORMATION
+) = DatasetDescriptor(
+    dataset_name=_SCANNETV2_NYU40,
+    splits_to_sizes={"train": 25000, "val": 0, "test": 0},
+    # The ignore class is also included
+    num_classes=41,
+    ignore_label=0,
+    panoptic_label_divisor=255,
+    class_has_instances_list=tuple(
+        [
+            i
+            for i in range(1, 41)
+            if i
+            not in [
+                1,  # wall
+                2,  # floor
+                22,  # ceiling
+            ]
+        ]
+    ),
     is_video_dataset=False,
     colormap=_SCANNETV2_NYU40_COLORMAP,
     is_depth_dataset=False,
@@ -262,7 +285,8 @@ MAP_NAME_TO_DATASET_INFO = {
     _CITYSCAPES_DVPS: CITYSCAPES_DVPS_INFORMATION,
     _COCO_PANOPTIC: COCO_PANOPTIC_INFORMATION,
     _SEMKITTI_DVPS: SEMKITTI_DVPS_INFORMATION,
-    _SCANNETV2_NYU40: SCANNETV2_NYU40_INFORMATION
+    _SCANNETV2_NYU40: SCANNETV2_NYU40_INFORMATION,
+    _SCANNET_FRAMES_25K_NYU40: SCANNET_FRAMES_25K_NYU40_INFORMATION,
 }
 
 MAP_NAMES = list(MAP_NAME_TO_DATASET_INFO.keys())
