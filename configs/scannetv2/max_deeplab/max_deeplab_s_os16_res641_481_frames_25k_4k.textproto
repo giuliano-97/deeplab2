@@ -24,11 +24,11 @@
 #   Transformers." In CVPR, 2021.
 
 # Use a unique experiment_name for each experiment.
-experiment_name: "max_deeplab_s_scannet_frames_25k"
+experiment_name: "max_deeplab_s_os16_res641_481_scannet_frames_25k_4k"
 model_options {
   # Update the path to the initial checkpoint (e.g., ImageNet
   # pretrained checkpoint).
-  initial_checkpoint: "/cluster/work/riner/users/albanesg/checkpoints/maxdeeplab_pretrained/max_deeplab_s_os16_res641_100k_coco_train/ckpt-100000"
+  initial_checkpoint: "/cluster/work/riner/users/albanesg/checkpoints/maxdeeplab_pretrained/max_deeplab_s_backbone_imagenet1k_strong_training_strategy/ckpt-350"
   backbone {
     name: "max_deeplab_s"
     output_stride: 16
@@ -63,9 +63,9 @@ model_options {
   }
 }
 trainer_options {
-  save_checkpoints_steps: 5000
-  save_summaries_steps: 1000
-  steps_per_loop: 1000
+  save_checkpoints_steps: 1000
+  save_summaries_steps: 500
+  steps_per_loop: 500
   loss_options {
     semantic_loss {
       name: "softmax_cross_entropy"
@@ -93,7 +93,7 @@ train_dataset_options {
   file_pattern: "/cluster/work/riner/users/albanesg/scannetv2_tf_record/scannet_frames_25k/scannetv-frames-25k-*.tfrecord"
   # Adjust the batch_size accordingly to better fit your GPU/TPU memory.
   # Also see Q1 in g3doc/faq.md.
-  batch_size: 25
+  batch_size: 16
   crop_size: 481
   crop_size: 641
   max_resize_value: 481
