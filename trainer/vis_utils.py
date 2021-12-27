@@ -539,6 +539,8 @@ def save_parsing_result(parsing_result,
     colormap = create_motchallenge_label_colormap()
   elif colormap_name == 'coco':
     colormap = create_coco_label_colormap()
+  elif colormap_name == 'scannetv2_nyu40':
+    colormap = create_scannetv2_nyu40_label_colormap()
   else:
     raise ValueError('Could not find a colormap for dataset %s.' %
                      colormap_name)
