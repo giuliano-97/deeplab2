@@ -24,11 +24,11 @@
 #   Transformers." In CVPR, 2021.
 
 # Use a unique experiment_name for each experiment.
-experiment_name: "max_deeplab_s_os16_res641_481_scannet_frames_25k_4k"
+experiment_name: "max_deeplab_s_os16_res641_481_scannet_frames_25k"
 model_options {
   # Update the path to the initial checkpoint (e.g., ImageNet
   # pretrained checkpoint).
-  initial_checkpoint: "/cluster/work/riner/users/albanesg/checkpoints/maxdeeplab_pretrained/max_deeplab_s_backbone_imagenet1k_strong_training_strategy/ckpt-350"
+  initial_checkpoint: "/cluster/work/riner/users/albanesg/models/maxdeeplab_pretrained/max_deeplab_s_backbone_imagenet1k_strong_training_strategy/ckpt-350"
   backbone {
     name: "max_deeplab_s"
     output_stride: 16
@@ -83,14 +83,14 @@ trainer_options {
   }
   solver_options {
     base_learning_rate: 0.001
-    training_number_of_steps: 4000
+    training_number_of_steps: 10000
     warmup_steps: 1000
     backbone_learning_rate_multiplier: 0.1
   }
 }
 train_dataset_options {
   dataset: "scannet_frames_25k"
-  file_pattern: "/cluster/work/riner/users/albanesg/scannetv2_tf_record/scannet_frames_25k/scannetv-frames-25k-*.tfrecord"
+  file_pattern: "/cluster/work/riner/users/albanesg/scannet_frames_25k_tf_record/train/scannetv-frames-25k-*.tfrecord"
   # Adjust the batch_size accordingly to better fit your GPU/TPU memory.
   # Also see Q1 in g3doc/faq.md.
   batch_size: 16
@@ -109,9 +109,9 @@ train_dataset_options {
   thing_id_mask_annotations: true
 }
 eval_dataset_options {
-  dataset: "scannetv2_nyu40"
+  dataset: "scannet_frames_25k"
   # Update the path to validation set.
-  file_pattern: "/cluster/work/riner/users/albanesg/scannetv2_tf_record/val/scannetv2-val-*.tfrecord"
+  file_pattern: "/cluster/work/riner/users/albanesg/scannet_frames_25k_tf_record/val/scannetv-frames-25k-*.tfrecord"
   batch_size: 1
   crop_size: 481
   crop_size: 641
