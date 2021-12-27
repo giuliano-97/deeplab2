@@ -16,6 +16,7 @@
 """This file contains functions to post-process MaX-DeepLab results."""
 
 import functools
+from collections import namedtuple
 from typing import List, Tuple, Dict, Text
 
 import tensorflow as tf
@@ -386,24 +387,31 @@ def _get_panoptic_predictions(
       tf.float32, size=batch_size, dynamic_size=False)
   stuff_mask_lists = tf.TensorArray(
       tf.float32, size=batch_size, dynamic_size=False)
-  for i in tf.range(batch_size):
+
+  MaskArrays = namedtuple("MaskArrays", "id_map_plus_one, semantic_map, thing, stuff")
+  init_mask_arrays = MaskArrays(mask_id_map_plus_one_lists, semantic_map_lists, thing_mask_lists, stuff_mask_lists)
+  
+  def loop_fn(idx, mask_arrays):
     mask_id_map_plus_one, semantic_map, thing_mask, stuff_mask = (
         _get_mask_id_and_semantic_maps(
             thing_class_ids, stuff_class_ids,
-            pixel_space_mask_logits[i, ...], transformer_class_probs[i, ...],
+            pixel_space_mask_logits[idx, ...], transformer_class_probs[idx, ...],
             image_shape, pixel_confidence_threshold,
             transformer_class_confidence_threshold, pieces)
         )
-    mask_id_map_plus_one_lists = mask_id_map_plus_one_lists.write(
-        i, mask_id_map_plus_one)
-    semantic_map_lists = semantic_map_lists.write(i, semantic_map)
-    thing_mask_lists = thing_mask_lists.write(i, thing_mask)
-    stuff_mask_lists = stuff_mask_lists.write(i, stuff_mask)
-  # This does not work with unknown shapes.
-  mask_id_maps_plus_one = mask_id_map_plus_one_lists.stack()
-  semantic_maps = semantic_map_lists.stack()
-  thing_masks = thing_mask_lists.stack()
-  stuff_masks = stuff_mask_lists.stack()
+
+    return idx + 1, MaskArrays(
+        mask_arrays.id_map_plus_one.write(idx, mask_id_map_plus_one),
+        mask_arrays.semantic_map.write(idx, semantic_map),
+        mask_arrays.thing.write(idx, thing_mask),
+        mask_arrays.stuff.write(idx, stuff_mask)
+    )
+
+  _, res_mask_arrays = tf.while_loop(lambda i, mask_arrays: i < batch_size, loop_fn, [0, init_mask_arrays])
+  mask_id_maps_plus_one = res_mask_arrays.id_map_plus_one.stack()
+  semantic_maps = res_mask_arrays.semantic_map.stack()
+  thing_masks = res_mask_arrays.thing.stack()
+  stuff_masks = res_mask_arrays.stuff.stack()
 
   panoptic_maps = _merge_mask_id_and_semantic_maps(
       mask_id_maps_plus_one, semantic_maps, thing_masks, stuff_masks,
