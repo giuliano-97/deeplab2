@@ -21,7 +21,8 @@ logging.basicConfig(level=logging.INFO)
 _PANOPTIC_LABEL_FORMAT = "raw"
 _TF_RECORD_PATTERN = "%s-%05d-of-%05d.tfrecord"
 _IMAGES_DIR_NAME = "color"
-_PANOPTIC_MAPS_DIR_NAME = "panoptic"
+_PANOPTIC_DIR_NAME = "panoptic"
+_SCANNET_25K_PANOPTIC_DIR_NAME = "instance"
 _SCANS_SEARCH_PATTERN = "scene*"
 _NUM_FRAMES_SEARCH_PATTERN = r"numColorFrames\s*=\s*(?P<num_frames>\w*)"
 _NUM_EXAMPLES_PER_SHARD = 500
@@ -131,6 +132,7 @@ def _get_color_and_panoptic_per_shard(
     scans_root_dir_path: str,
     scan_ids: List[str],
     num_examples_per_shard: int,
+    is_scannet_frames_25k: bool,
 ):
     color_and_panoptic_per_shard = []
     dirs_to_remove = []
@@ -147,10 +149,15 @@ def _get_color_and_panoptic_per_shard(
             _extract_tar_archive(images_archive_path)
             dirs_to_remove.append(images_dir_path)
 
-        panoptic_maps_dir_path = os.path.join(scan_dir_path, _PANOPTIC_MAPS_DIR_NAME)
+        panoptic_maps_dir_path = os.path.join(
+            scan_dir_path,
+            _PANOPTIC_DIR_NAME
+            if not is_scannet_frames_25k
+            else _SCANNET_25K_PANOPTIC_DIR_NAME,
+        )
         if not os.path.exists(panoptic_maps_dir_path):
             panoptic_maps_archive_path = os.path.join(
-                scan_dir_path, f"{_PANOPTIC_MAPS_DIR_NAME}.tar.gz"
+                scan_dir_path, f"{_PANOPTIC_DIR_NAME}.tar.gz"
             )
             if not os.path.exists(panoptic_maps_archive_path):
                 logging.warning(
@@ -238,6 +245,7 @@ def _create_tf_record_dataset(
     output_dir_path: str,
     num_examples_per_shard: int,
     scan_ids_file_path: Optional[str],
+    is_scannet_frames_25k: bool,
 ):
     assert tf.io.gfile.isdir(scans_root_dir_path)
 
@@ -263,6 +271,7 @@ def _create_tf_record_dataset(
         scans_root_dir_path=scans_root_dir_path,
         scan_ids=scan_ids,
         num_examples_per_shard=num_examples_per_shard,
+        is_scannet_frames_25k=is_scannet_frames_25k,
     )
 
     for shard_id, example_list in enumerate(color_and_panoptic_per_shard):
@@ -326,6 +335,12 @@ def _parse_args():
         help="Number of examples per shard.",
     )
 
+    parser.add_argument(
+        "--is_scannet_frames_25k",
+        action="store_true",
+        help="Dataset is only scannet frames 25k.",
+    )
+
     return parser.parse_args()
 
 
@@ -337,4 +352,5 @@ if __name__ == "__main__":
         output_dir_path=args.output_dir_path,
         num_examples_per_shard=args.num_examples_per_shard,
         scan_ids_file_path=args.scan_ids_file_path,
+        is_scannet_frames_25k=args.is_scannet_frames_25k,
     )

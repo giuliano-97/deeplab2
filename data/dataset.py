@@ -254,12 +254,12 @@ SCANNETV2_NYU40_INFORMATION = DatasetDescriptor(
 SCANNET_FRAMES_25K_NYU40_INFORMATION = (
     SCANNETV2_NYU40_INFORMATION
 ) = DatasetDescriptor(
-    dataset_name=_SCANNETV2_NYU40,
+    dataset_name=_SCANNET_FRAMES_25K_NYU40,
     splits_to_sizes={"train": 25000, "val": 0, "test": 0},
     # The ignore class is also included
     num_classes=41,
     ignore_label=0,
-    panoptic_label_divisor=255,
+    panoptic_label_divisor=1000,
     class_has_instances_list=tuple(
         [
             i
