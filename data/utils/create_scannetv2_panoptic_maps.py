@@ -1,13 +1,13 @@
 import functools
 import os
+import cv2
 import multiprocessing
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
-import pandas as pd
 from absl import app
 from absl import flags
 from absl import logging
@@ -37,22 +37,23 @@ flags.DEFINE_bool(
     default=False,
     help="Panoptic maps will be compressed into a tar.gz archive.",
 )
+flags.DEFINE_bool(
+    name="resize",
+    default=False,
+    help="Resize the panoptic maps to 640x480",
+)
 
 flags.DEFINE_integer(name="jobs", default=2, help="Number of parallel jobs")
 
-# Same as Cityscapes
-_LABEL_DIVISOR = 255
+
+_LABEL_DIVISOR = 1000
 _SEMANTIC_MAPS_ARCHIVE_SUFFIX = "_2d-label-filt.zip"
 _INSTANCE_MAPS_ARCHIVE_SUFFIX = "_2d-instance-filt.zip"
 _SEMANTIC_MAPS_DIR_NAME = "label-filt"
 _INSTANCE_MAPS_DIR_NAME = "instance-filt"
-_SEMANTIC_MAPS_DIR_NAME_SCANNET_FRAMES_25K = "label"
-_INSTANCE_MAPS_DIR_NAME_SCANNET_FRAMES_25K = "instance"
-
 _PANOPTIC_MAPS_DIR_NAME = "panoptic"
 
 _NYU40_STUFF_CLASSES = [1, 2, 22]
-_SCANNET_25K_INSTANCE_DIVISOR = 1000
 
 
 def _scan_has_panoptic(scan_dir_path: Path):
@@ -78,13 +79,6 @@ def _convert_semantic_map_labels(
     label_conversion_dict: Dict,
 ):
     return np.vectorize(label_conversion_dict.get)(semantic_map)
-
-
-def _decode_scannet_frames_25k_instance_map(
-    instance_map: np.ndarray,
-    semantic_map: np.ndarray,
-):
-    return instance_map - _SCANNET_25K_INSTANCE_DIVISOR * semantic_map
 
 
 def _normalize_instance_map(
@@ -130,30 +124,21 @@ def generate_deeplab2_panoptic_map(
     semantic_map_file_path: Path,
     instance_map_file_path: Path,
     panoptic_maps_dir_path: Path,
-    is_scannet_frames_25k: bool,
 ):
     semantic_map = np.array(Image.open(str(semantic_map_file_path)))
     instance_map = np.array(Image.open(str(instance_map_file_path)))
 
     # Convert semantic labels to the target labels set
-    if not is_scannet_frames_25k:
-        semantic_map = _convert_semantic_map_labels(
-            semantic_map,
-            SCANNETV2_TO_NYU40,
-        )
+    semantic_map = _convert_semantic_map_labels(
+        semantic_map,
+        SCANNETV2_TO_NYU40,
+    )
 
-    if is_scannet_frames_25k:
-        instance_map = _decode_scannet_frames_25k_instance_map(
-            instance_map, semantic_map
-        )
-
-    # Normalize the instance map so that all the instance ids are between 1 and #instances
-    if not is_scannet_frames_25k:
-        instance_map = _normalize_instance_map(
-            instance_map,
-            semantic_map,
-            _NYU40_STUFF_CLASSES,
-        )
+    instance_map = _normalize_instance_map(
+        instance_map,
+        semantic_map,
+        _NYU40_STUFF_CLASSES,
+    )
 
     # Make panoptic map
     panoptic_map = _make_panoptic_from_semantic_and_instance(
@@ -161,30 +146,26 @@ def generate_deeplab2_panoptic_map(
         instance_map,
     )
 
+    if FLAGS.resize:
+        panoptic_map = cv2.resize(
+            panoptic_map,
+            dsize=(480, 640),
+            interpolation=cv2.INTER_NEAREST,
+        )
+
     # Save panoptic map to disk
-    panoptic_map_file_path = panoptic_maps_dir_path / semantic_map_file_path.name
+    panoptic_map_file_path = panoptic_maps_dir_path / (
+        semantic_map_file_path.stem.zfill(5) + ".png"
+    )
     panoptic_map_image = Image.fromarray(panoptic_map)
     panoptic_map_image.save(str(panoptic_map_file_path))
 
 
 def _create_panoptic_maps_for_scan(
     scan_dir_path: Path,
-    is_scannet_frames_25k: bool,
     remove_semantic_and_instance: bool,
     compress: bool,
 ):
-    semantic_maps_dir_name = (
-        _SEMANTIC_MAPS_DIR_NAME_SCANNET_FRAMES_25K
-        if is_scannet_frames_25k
-        else _SEMANTIC_MAPS_DIR_NAME
-    )
-
-    instance_maps_dir_name = (
-        _INSTANCE_MAPS_DIR_NAME_SCANNET_FRAMES_25K
-        if is_scannet_frames_25k
-        else _INSTANCE_MAPS_DIR_NAME
-    )
-
     # Check if panoptic maps have already been created for this scans
     if _scan_has_panoptic(scan_dir_path):
         logging.warning(f"{scan_dir_path.name} already has panoptic!")
@@ -192,8 +173,8 @@ def _create_panoptic_maps_for_scan(
     panoptic_maps_dir_path = scan_dir_path / _PANOPTIC_MAPS_DIR_NAME
     panoptic_maps_dir_path.mkdir(exist_ok=True)
 
-    semantic_maps_dir_path = scan_dir_path / semantic_maps_dir_name
-    instance_maps_dir_path = scan_dir_path / instance_maps_dir_name
+    semantic_maps_dir_path = scan_dir_path / _SEMANTIC_MAPS_DIR_NAME
+    instance_maps_dir_path = scan_dir_path / _INSTANCE_MAPS_DIR_NAME
     remove_semantic = False or remove_semantic_and_instance
     remove_instance = False or remove_semantic_and_instance
     if not semantic_maps_dir_path.exists():
@@ -235,7 +216,6 @@ def _create_panoptic_maps_for_scan(
             semantic_map_file_path,
             instance_map_file_path,
             panoptic_maps_dir_path,
-            is_scannet_frames_25k,
         )
 
     # Delete semantic and instance maps
@@ -259,7 +239,6 @@ def create_scannetv2_panoptic_maps(_):
     assert n_jobs > 0
     remove_semantic_and_instance = FLAGS.remove_semantic_and_instance
     compress = FLAGS.compress
-    is_scannet_frames_25k = FLAGS.is_scannet_frames_25k
 
     # Get all the scan dirs
     scan_dir_paths = [
@@ -270,7 +249,6 @@ def create_scannetv2_panoptic_maps(_):
         # Create panoptic maps for every directory in parallel
         job_fn = functools.partial(
             _create_panoptic_maps_for_scan,
-            is_scannet_frames_25k=is_scannet_frames_25k,
             remove_semantic_and_instance=remove_semantic_and_instance,
             compress=compress,
         )
@@ -280,7 +258,6 @@ def create_scannetv2_panoptic_maps(_):
         for scan_dir_path in scan_dir_paths:
             _create_panoptic_maps_for_scan(
                 scan_dir_path=scan_dir_path,
-                is_scannet_frames_25k=is_scannet_frames_25k,
                 remove_semantic_and_instance=remove_semantic_and_instance,
                 compress=compress,
             )
