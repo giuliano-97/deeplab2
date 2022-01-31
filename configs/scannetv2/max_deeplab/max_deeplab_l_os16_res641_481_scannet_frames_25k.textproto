@@ -1,7 +1,7 @@
 # proto-file: deeplab2/config.proto
 # proto-message: ExperimentOptions
 #
-# MaX-DeepLab-S with resolution 641x641 and 100k training steps.
+# MaX-DeepLab-L with resolution 1025x1025 and 100k training steps.
 #
 ############### PLEASE READ THIS BEFORE USING THIS CONFIG ###############
 # Before using this config, you need to update the following fields:
@@ -13,9 +13,17 @@
 #   validation set, e.g., your_dataset/eval*.tfrecord
 #########################################################################
 #
-# MaX-DeepLab-S replaces the last two stages of ResNet-50-beta with axial-
-# attention blocks and applies a small dual-path transformer.
+# MaX-DeepLab-L replaces the last two stages of Wide ResNet-41 with axial-
+# attention blocks and applies a large dual-path transformer.
+# Wide ResNet-41 improves over Wide ResNet-38 by (1) removing the last residual
+# block, and (2) repeating the second last residual block two more times.
 #
+# For Wide ResNet-38, see
+# - Zifeng Wu, et al. "Wider or deeper: Revisiting the ResNet model for
+#   visual recognition." Pattern Recognition, 2019.
+# For Wide ResNet-41, see
+# - Liang-Chieh Chen, et al. "Naive-Student: Leveraging Semi-Supervised
+#   Learning in Video Sequences for Urban Scene Segmentation.", In ECCV, 2020.
 # For axial-attention, see
 # - Huiyu Wang, et al. "Axial-DeepLab: Stand-Alone Axial-Attention for Panoptic
 #   Segmentation." In ECCV, 2020.
@@ -24,13 +32,13 @@
 #   Transformers." In CVPR, 2021.
 
 # Use a unique experiment_name for each experiment.
-experiment_name: "max_deeplab_s_os16_res641_481_scannet_frames_25k"
+experiment_name: "max_deeplab_l_os16_res641_481_scannet_frames_25k"
 model_options {
   # Update the path to the initial checkpoint (e.g., ImageNet
   # pretrained checkpoint).
-  initial_checkpoint: "/cluster/work/riner/users/albanesg/models/maxdeeplab_pretrained/max_deeplab_s_backbone_imagenet1k_strong_training_strategy/ckpt-350"
+  initial_checkpoint: "/cluster/work/riner/users/albanesg/models/maxdeeplab_pretrained/max_deeplab_l_backbone_imagenet1k_strong_training_strategy/ckpt-350"
   backbone {
-    name: "max_deeplab_s"
+    name: "max_deeplab_l"
     output_stride: 16
     drop_path_keep_prob: 0.8
     drop_path_schedule: "linear"
@@ -82,15 +90,15 @@ trainer_options {
     }
   }
   solver_options {
-    base_learning_rate: 0.001
-    training_number_of_steps: 20000
-    warmup_steps: 2000
+    base_learning_rate: 0.0005
+    training_number_of_steps: 50000
+    warmup_steps: 2500
     backbone_learning_rate_multiplier: 0.1
   }
 }
 train_dataset_options {
   dataset: "scannet_frames_25k"
-  file_pattern: "/cluster/work/riner/users/albanesg/scannet_frames_25k_tf_record/train/scannetv-frames-25k-*.tfrecord"
+  file_pattern: "/cluster/work/riner/users/albanesg/scannet_frames_25k_tf_record/train/scannet_frames_25k-*.tfrecord"
   # Adjust the batch_size accordingly to better fit your GPU/TPU memory.
   # Also see Q1 in g3doc/faq.md.
   batch_size: 16
@@ -102,24 +110,25 @@ train_dataset_options {
     min_scale_factor: 0.5
     max_scale_factor: 1.5
     scale_factor_step_size: 0.1
+    autoaugment_policy_name: "simple_classification_policy"
   }
-  increase_small_instance_weights: false
-  small_instance_weight: 1.0
+  increase_small_instance_weights: true
+  small_instance_weight: 3.0
   # This option generates ground truth labels for MaX-Deeplab.
   thing_id_mask_annotations: true
 }
 eval_dataset_options {
   dataset: "scannet_frames_25k"
   # Update the path to validation set.
-  file_pattern: "/cluster/work/riner/users/albanesg/scannet_frames_25k_tf_record/val/scannetv-frames-25k-*.tfrecord"
+  file_pattern: "/cluster/work/riner/users/albanesg/scannet_frames_25k_tf_record/val/scannet_frames_25k-*.tfrecord"
   batch_size: 1
   crop_size: 481
   crop_size: 641
   max_resize_value: 481
   max_resize_value: 641
   # Add options to make the evaluation loss comparable to the training loss.
-  increase_small_instance_weights: false
-  small_instance_weight: 1.0
+  increase_small_instance_weights: true
+  small_instance_weight: 3.0
   # This option generates ground truth labels for MaX-Deeplab.
   thing_id_mask_annotations: true
 }
@@ -129,9 +138,8 @@ evaluator_options {
   stuff_area_limit: 1600
   transformer_class_confidence_threshold: 0.7
   pixel_confidence_threshold: 0.4
-  num_vis_samples: 100
   save_predictions: true
-  save_raw_predictions: true
+  save_raw_predictions: false
   # Some options are inapplicable to MaX-DeepLab, including nms_kernel,
   # merge_semantic_and_instance_with_tf_op, center_score_threshold,
   # keep_k_centers, add_flipped_images, and eval_scales.
