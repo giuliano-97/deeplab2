@@ -127,63 +127,83 @@ def get_transformer_class_prediction(
     return detected_mask_class_pred, detected_mask_indices, num_detections
 
 
-def estimate_instance_scores(
+def extract_segments_info(
     panoptic_pred: np.ndarray,
     pixel_space_mask_logits: tf.Tensor,
-    transformer_class_logits: tf.Tensor,
+    transformer_class_probs: tf.Tensor,
+    save_raw_probability_dist: True,
 ):
     image_shape = panoptic_pred.shape
 
-    # Compute class probs for each mask
-    transformer_class_probs = tf.nn.softmax(transformer_class_logits, axis=-1)
-    transformer_class_probs = transformer_class_probs[..., :-1]
+    # Note: the last class represents the null label and we don't consider it
+    # when extracting the detected segments, so don't include the probability
     _, detected_mask_indices, _ = get_transformer_class_prediction(
-        transformer_class_probs,
+        transformer_class_probs[..., :-1],  # Class probs vectors minus the void class
         _TRANSFOMER_CLASS_CONFIDENCE_THRESH,
     )
 
-    # Resize to native resolution
-    pixel_mask_logits = tf.compat.v1.image.resize_bilinear(
-        pixel_space_mask_logits,
-        (image_shape[0] + 1, image_shape[1] + 1),
-        align_corners=True,
+    # Gather the class probs of the detected masks
+    detected_mask_class_probs = tf.gather(
+        transformer_class_probs, detected_mask_indices, axis=1
     )
 
+    # Resize pixel mask logits to native resolution
+    pixel_space_mask_logits = tf.compat.v1.image.resize_bilinear(
+        tf.expand_dims(pixel_space_mask_logits, 0),
+        (image_shape[0] + 1, image_shape[1] + 1),  # +1 because of the cropping
+        align_corners=True,
+    )
+    pixel_space_mask_logits = tf.squeeze(
+        pixel_space_mask_logits,
+        axis=0,
+    )
+
+    # Get the pixel mask logits for the detected segments
     detected_pixel_mask_logits = tf.gather(
-        pixel_mask_logits, detected_mask_indices, axis=-1
+        pixel_space_mask_logits,
+        detected_mask_indices,
+        axis=-1,
     )
 
     # Compute mask confidence for each pixel
-    pixel_mask_confidence_map = tf.squeeze(
-        tf.reduce_max(
-            tf.nn.softmax(detected_pixel_mask_logits, axis=-1),
-            axis=-1,
-        )
+    detected_pixel_mask_confidence_map = tf.reduce_max(
+        tf.nn.softmax(detected_pixel_mask_logits, axis=-1),
+        axis=-1,
     )
 
     # Drop the last row and column to match the image shape and conv to numpy
-    pixel_mask_confidence_map = pixel_mask_confidence_map[:-1, :-1].numpy()
+    detected_pixel_mask_confidence_map = detected_pixel_mask_confidence_map[
+        :-1, :-1
+    ].numpy()
 
     # Loop over segments in instance prediction
-    segment_ids = np.unique(panoptic_pred)
-    instance_scores = []
-    for segment_id in segment_ids:
+    segment_ids, areas = np.unique(panoptic_pred, return_counts=True)
+    segments_info = []
+    for segment_id, area in zip(segment_ids, areas):
         # Skip stuff segments
-        segment_instance_id = segment_id % _LABEL_DIVISOR
-        if segment_instance_id == 0:
-            continue
         segment_class_id = segment_id // _LABEL_DIVISOR
-        # Compute the score for this instance by averaging the foreground map probs
-        score = np.mean(pixel_mask_confidence_map[panoptic_pred == segment_id])
-        instance_scores.append(
-            {
-                "class_id": int(segment_class_id),
-                "instance_id": int(segment_instance_id),
-                "score": float(score),
-            }
-        )
-
-    return instance_scores
+        segment_instance_id = segment_id % _LABEL_DIVISOR
+        segment_info = {
+            "id": segment_id,
+            "category_id": int(segment_class_id),
+            "area": int(area),
+        }
+        if segment_instance_id == 0:
+            segment_info.update({"isthing": False})
+        else:
+            # Compute the score for this instance by averaging the foreground map probs
+            score = np.mean(
+                detected_pixel_mask_confidence_map[panoptic_pred == segment_id]
+            )
+            segment_info.update(
+                {
+                    "is_thing": True,
+                    "instance_id": int(segment_instance_id),
+                    "score": float(score),
+                }
+            )
+        segments_info.append(segments_info)
+    return segments_info
 
 
 def main(argv: Sequence[str]) -> None:
@@ -217,6 +237,22 @@ def main(argv: Sequence[str]) -> None:
         panoptic_prediction_rgb = convert_prediction_to_rgb(panoptic_prediction)
         Image.fromarray(panoptic_prediction_rgb).save(panoptic_prediction_file_path)
 
+        transformer_class_probs = tf.nn.softmax(
+            prediction["transformer_class_logits"], axis=-1
+        )
+        pixel_space_mask_logits = prediction["pixel_space_mask_logits"]
+        segments_info = extract_segments_info(
+            panoptic_prediction,
+            pixel_space_mask_logits[0, ...],
+            transformer_class_probs[0, ...],
+        )
+        segments_info_file = os.path.join(
+            FLAGS.output_path,
+            os.path.splitext(os.path.basename(image_file))[0] + "_segments_info.json",
+        )
+        with open(segments_info_file, "w") as f:
+            json.dump(segments_info, f)
+
         # Estimate the uncertainty of semantic labels
         if FLAGS.estimate_semantic_uncertainty:
             semantic_probs = tf.squeeze(prediction["semantic_probs"]).numpy()
@@ -238,20 +274,6 @@ def main(argv: Sequence[str]) -> None:
                 + "_semantic_probs.npy",
             )
             np.save(semantic_probs_file_path, semantic_probs)
-
-        if FLAGS.estimate_instance_scores:
-            instance_scores = estimate_instance_scores(
-                panoptic_prediction,
-                prediction["pixel_space_mask_logits"],
-                prediction["transformer_class_logits"],
-            )
-            instance_scores_file = os.path.join(
-                FLAGS.output_path,
-                os.path.splitext(os.path.basename(image_file))[0]
-                + "_instance_scores.json",
-            )
-            with open(instance_scores_file, "w") as f:
-                json.dump(instance_scores, f)
 
 
 if __name__ == "__main__":
