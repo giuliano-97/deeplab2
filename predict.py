@@ -33,19 +33,20 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_boolean(
+    "include_segment_class_probs",
+    default=False,
+    help="Whether the full class distribution should be saved for each segment.",
+)
+
+flags.DEFINE_boolean(
     "estimate_semantic_uncertainty",
     default=False,
     help="Whether pixel wise semantic uncertainty should be estimated from probs.",
 )
 
-flags.DEFINE_boolean(
-    "estimate_instance_scores",
-    default=False,
-    help="Whether instance scores should be estimated from mask logits softmax.",
-)
 
 flags.DEFINE_boolean(
-    "save_raw_semantic_probs",
+    "save_dense_semantic_probs",
     default=False,
     help="Save semantic probabilities to disk as .npy files.",
 )
@@ -131,7 +132,7 @@ def extract_segments_info(
     panoptic_pred: np.ndarray,
     pixel_space_mask_logits: tf.Tensor,
     transformer_class_probs: tf.Tensor,
-    save_raw_probability_dist: True,
+    include_segment_class_probs: True,
 ):
     image_shape = panoptic_pred.shape
 
@@ -140,11 +141,6 @@ def extract_segments_info(
     _, detected_mask_indices, _ = get_transformer_class_prediction(
         transformer_class_probs[..., :-1],  # Class probs vectors minus the void class
         _TRANSFOMER_CLASS_CONFIDENCE_THRESH,
-    )
-
-    # Gather the class probs of the detected masks
-    detected_mask_class_probs = tf.gather(
-        transformer_class_probs, detected_mask_indices, axis=1
     )
 
     # Resize pixel mask logits to native resolution
@@ -180,11 +176,14 @@ def extract_segments_info(
     segment_ids, areas = np.unique(panoptic_pred, return_counts=True)
     segments_info = []
     for segment_id, area in zip(segment_ids, areas):
+        # Skip ignore areas
+        if segment_id == 0:
+            continue
         # Skip stuff segments
         segment_class_id = segment_id // _LABEL_DIVISOR
         segment_instance_id = segment_id % _LABEL_DIVISOR
         segment_info = {
-            "id": segment_id,
+            "id": int(segment_id),
             "category_id": int(segment_class_id),
             "area": int(area),
         }
@@ -197,12 +196,30 @@ def extract_segments_info(
             )
             segment_info.update(
                 {
-                    "is_thing": True,
+                    "isthing": True,
                     "instance_id": int(segment_instance_id),
                     "score": float(score),
                 }
             )
-        segments_info.append(segments_info)
+        segments_info.append(segment_info)
+
+    if include_segment_class_probs:
+        # Gather the class probs of the detected masks
+        detected_mask_class_probs = tf.cast(
+            tf.gather(transformer_class_probs, detected_mask_indices, axis=0),
+            tf.float32,
+        ).numpy()
+        # For each pixel get the index of the mask from which it was taken
+        mask_id_map = tf.cast(
+            tf.argmax(detected_pixel_mask_logits, axis=-1),
+            tf.int32,
+        )[:-1, :-1].numpy()
+        for segment_info in segments_info:
+            segment_id = segment_info["id"]
+            mask_id = np.unique(mask_id_map[panoptic_pred == segment_id])[0]
+            mask_prob_dist = detected_mask_class_probs[mask_id, ...]
+            segment_info.update({"class_probs": mask_prob_dist.tolist()})
+
     return segments_info
 
 
@@ -212,8 +229,8 @@ def main(argv: Sequence[str]) -> None:
     assert FLAGS.images_dir_path != FLAGS.output_path
     tf.io.gfile.makedirs(FLAGS.output_path)
 
-    if FLAGS.save_raw_semantic_probs:
-        print("Saving raw semantic probs may occupy a large amount of storage.")
+    if FLAGS.save_dense_semantic_probs:
+        print("Saving dense semantic probs may occupy a large amount of storage.")
 
     # Load the model
     model = tf.saved_model.load(FLAGS.saved_model_path)
@@ -245,6 +262,7 @@ def main(argv: Sequence[str]) -> None:
             panoptic_prediction,
             pixel_space_mask_logits[0, ...],
             transformer_class_probs[0, ...],
+            include_segment_class_probs=FLAGS.include_segment_class_probs,
         )
         segments_info_file = os.path.join(
             FLAGS.output_path,
@@ -266,7 +284,7 @@ def main(argv: Sequence[str]) -> None:
             )
             Image.fromarray(uncertainty_map).save(uncertainty_map_file_path)
 
-        if FLAGS.save_raw_semantic_probs:
+        if FLAGS.save_dense_semantic_probs:
             semantic_probs = tf.squeeze(prediction["semantic_probs"]).numpy()
             semantic_probs_file_path = os.path.join(
                 FLAGS.output_path,
