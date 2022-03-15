@@ -39,14 +39,14 @@ flags.DEFINE_boolean(
 )
 
 flags.DEFINE_boolean(
-    "estimate_semantic_uncertainty",
+    "export_dense_semantic_uncertainty",
     default=False,
     help="Whether pixel wise semantic uncertainty should be estimated from probs.",
 )
 
 
 flags.DEFINE_boolean(
-    "save_dense_semantic_probs",
+    "export_dense_semantic_probs",
     default=False,
     help="Save semantic probabilities to disk as .npy files.",
 )
@@ -229,7 +229,7 @@ def main(argv: Sequence[str]) -> None:
     assert FLAGS.images_dir_path != FLAGS.output_path
     tf.io.gfile.makedirs(FLAGS.output_path)
 
-    if FLAGS.save_dense_semantic_probs:
+    if FLAGS.export_dense_semantic_probs:
         print("Saving dense semantic probs may occupy a large amount of storage.")
 
     # Load the model
@@ -272,7 +272,7 @@ def main(argv: Sequence[str]) -> None:
             json.dump(segments_info, f)
 
         # Estimate the uncertainty of semantic labels
-        if FLAGS.estimate_semantic_uncertainty:
+        if FLAGS.export_dense_semantic_uncertainty:
             semantic_probs = tf.squeeze(prediction["semantic_probs"]).numpy()
             uncertainty_map = estimate_semantic_uncertainty_map_from_probs(
                 semantic_probs
@@ -284,7 +284,7 @@ def main(argv: Sequence[str]) -> None:
             )
             Image.fromarray(uncertainty_map).save(uncertainty_map_file_path)
 
-        if FLAGS.save_dense_semantic_probs:
+        if FLAGS.export_dense_semantic_probs:
             semantic_probs = tf.squeeze(prediction["semantic_probs"]).numpy()
             semantic_probs_file_path = os.path.join(
                 FLAGS.output_path,
